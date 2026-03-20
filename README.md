@@ -1,7 +1,7 @@
 # Aliens2
 A simple two player space invader variation.
 
-Wholly vibe-coded using Mistsal.
+Wholly vibe-coded using Mistral.
 
 The idea is based on something I wrote with a friend in high school.
 
