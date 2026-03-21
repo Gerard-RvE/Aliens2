@@ -22,22 +22,22 @@ PURPLE = (128, 0, 128)  # Color for invincibility upgrade
 ORANGE = (255, 165, 0)  # Color for fast shoot upgrade
 CYAN = (0, 255, 255)  # Color for triple shot upgrade
 
-# Load sound effects
-try:
-    shoot_sound = pygame.mixer.Sound("shoot.wav")
-    hit_sound = pygame.mixer.Sound("hit.wav")
-    game_over_sound = pygame.mixer.Sound("game_over.wav")
-    upgrade_sound = pygame.mixer.Sound("upgrade.wav")
-    life_lost_sound = pygame.mixer.Sound("life_lost.wav")
-    game_over_played = False
-except:
-    print("Warning: Sound files not found. Continuing without sound.")
-    shoot_sound = None
-    hit_sound = None
-    game_over_sound = None
-    upgrade_sound = None
-    life_lost_sound = None
-    game_over_played = False
+# Load sound effects with error handling
+def load_sound(filename):
+    try:
+        sound = pygame.mixer.Sound(filename)
+        return sound
+    except:
+        print(f"Warning: Could not load sound file {filename}. Continuing without sound.")
+        return None
+
+shoot_sound = load_sound("shoot.wav")
+hit_sound = load_sound("hit.wav")
+game_over_sound = load_sound("game_over.wav")
+upgrade_sound = load_sound("upgrade.wav")
+life_lost_sound = load_sound("life_lost.wav")
+
+game_over_played = False
 
 # Draw player ship (triangle with base)
 def draw_player_ship(surface, x, y, color):
