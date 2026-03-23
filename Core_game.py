@@ -1,14 +1,24 @@
 import pygame
 import sys
 import random
+import os
 
 # Initialize pygame
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
 
-# Screen setup (16:9 ratio, borderless)
-WIDTH, HEIGHT = 1280, 720
-screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
+# Get screen info
+screen_info = pygame.display.Info()
+SCREEN_WIDTH, SCREEN_HEIGHT = screen_info.current_w, screen_info.current_h
+
+# Calculate game window size (maintain 16:9 aspect ratio)
+ASPECT_RATIO = 16 / 9
+game_height = min(SCREEN_HEIGHT, int(SCREEN_WIDTH / ASPECT_RATIO))
+game_width = int(game_height * ASPECT_RATIO)
+
+# Screen setup (borderless, fit to screen)
+screen = pygame.display.set_mode((game_width, game_height), pygame.NOFRAME)
+WIDTH, HEIGHT = screen.get_size()
 pygame.display.set_caption("Two-Player Space Invaders")
 
 # Colors
@@ -25,7 +35,8 @@ CYAN = (0, 255, 255)  # Color for triple shot upgrade
 # Load sound effects with error handling
 def load_sound(filename):
     try:
-        sound = pygame.mixer.Sound(filename)
+        sound_path = os.path.join(os.path.dirname(__file__), filename)
+        sound = pygame.mixer.Sound(sound_path)
         return sound
     except:
         print(f"Warning: Could not load sound file {filename}. Continuing without sound.")
@@ -105,12 +116,20 @@ class Player:
         if keys[self.controls["down"]] and self.y < HEIGHT - self.height:
             self.y += self.speed
 
-    def shoot(self, keys):
+    def shoot(self, side):
         now = pygame.time.get_ticks()
-        if keys[self.controls["shoot"]] and now - self.last_shot > self.shoot_delay:
+        bullets = []
+
+        if now - self.last_shot > self.shoot_delay:
             self.last_shot = now
             if shoot_sound:
+                shoot_sound.set_volume(1.0, 1.0)
+                if side == 0:
+                    shoot_sound.set_volume(1.0, 0.0)  # Left channel
+                else:
+                    shoot_sound.set_volume(0.0, 1.0)  # Right channel
                 shoot_sound.play()
+
             if self.upgrade_active and self.upgrade_type == "triple_shot":
                 # Fire three bullets: one straight, two angled
                 middle_bullet = Bullet(self.x + self.width//2 - 2, self.y)
@@ -118,10 +137,11 @@ class Player:
                 left_bullet.speed_x = -1  # Move left slightly
                 right_bullet = Bullet(self.x + self.width//2 + 3, self.y)
                 right_bullet.speed_x = 1   # Move right slightly
-                return [middle_bullet, left_bullet, right_bullet]
+                bullets.extend([middle_bullet, left_bullet, right_bullet])
             else:
-                return Bullet(self.x + self.width//2 - 2, self.y)
-        return None
+                bullets.append(Bullet(self.x + self.width//2 - 2, self.y))
+
+        return bullets
 
 # Alien class
 class Alien:
@@ -185,8 +205,8 @@ class Upgrade:
 # Reset game
 def reset_game():
     global left_player, right_player, aliens, bullets, upgrades, game_over, winner, game_started, game_over_played, upgrade_left, upgrade_right
-    left_player = Player(100, HEIGHT - 50, {"left": pygame.K_a, "right": pygame.K_d, "up": pygame.K_w, "down": pygame.K_s, "shoot": pygame.K_LCTRL}, 0)
-    right_player = Player(WIDTH//2 + 100, HEIGHT - 50, {"left": pygame.K_LEFT, "right": pygame.K_RIGHT, "up": pygame.K_UP, "down": pygame.K_DOWN, "shoot": pygame.K_RSHIFT}, 1)
+    left_player = Player(int(WIDTH * 0.15), HEIGHT - 50, {"left": pygame.K_a, "right": pygame.K_d, "up": pygame.K_w, "down": pygame.K_s, "shoot": pygame.K_LCTRL}, 0)
+    right_player = Player(int(WIDTH * 0.85) - 20, HEIGHT - 50, {"left": pygame.K_LEFT, "right": pygame.K_RIGHT, "up": pygame.K_UP, "down": pygame.K_DOWN, "shoot": pygame.K_RSHIFT}, 1)
     aliens = [Alien(random.randint(0, WIDTH//2 - 25), 50, 0), Alien(random.randint(WIDTH//2, WIDTH - 25), 50, 1)]
     bullets = []
     upgrades = []
@@ -201,15 +221,15 @@ def reset_game():
 reset_game()
 
 # Font
-font = pygame.font.SysFont("Arial", 36)
-notification_font = pygame.font.SysFont("Arial", 24)
+font = pygame.font.SysFont("Arial", int(36 * min(WIDTH/1280, HEIGHT/720)))
+notification_font = pygame.font.SysFont("Arial", int(24 * min(WIDTH/1280, HEIGHT/720)))
 
 # Main game loop
 running = True
 while running:
     screen.fill(BLACK)
-    pygame.draw.line(screen, WHITE, (WIDTH//2, 0), (WIDTH//2, HEIGHT), 2)
 
+    # Handle events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -220,6 +240,11 @@ while running:
                     game_started = True
             if event.key == pygame.K_ESCAPE:  # Exit on ESC key
                 running = False
+            # Handle shooting with key events
+            if event.key == pygame.K_LCTRL and game_started and not game_over:
+                bullets.extend(left_player.shoot(0))
+            if event.key == pygame.K_RSHIFT and game_started and not game_over:
+                bullets.extend(right_player.shoot(1))
 
     if not game_started:
         # Draw intro screen
@@ -249,28 +274,15 @@ while running:
             you_won_text = font.render("You won!", True, GREEN)
             screen.blit(you_won_text, (WIDTH//2 + WIDTH//4 - you_won_text.get_width()//2, HEIGHT//2 - 30))
     else:
+        # Draw the dividing line only during gameplay
+        pygame.draw.line(screen, WHITE, (WIDTH//2, 0), (WIDTH//2, HEIGHT), 2)
+
         # Game logic
         keys = pygame.key.get_pressed()
 
-        # Player movement and shooting
+        # Player movement
         left_player.move(keys)
         right_player.move(keys)
-
-        # Handle shooting for left player
-        bullet = left_player.shoot(keys)
-        if bullet:
-            if isinstance(bullet, list):  # Handle triple shot
-                bullets.extend(bullet)
-            else:
-                bullets.append(bullet)
-
-        # Handle shooting for right player
-        bullet = right_player.shoot(keys)
-        if bullet:
-            if isinstance(bullet, list):  # Handle triple shot
-                bullets.extend(bullet)
-            else:
-                bullets.append(bullet)
 
         # Update bullets
         for bullet in bullets[:]:
@@ -287,6 +299,7 @@ while running:
                 if alien.side == 0 and not left_player.upgrade_active:
                     left_player.lives -= 1
                     if life_lost_sound:
+                        life_lost_sound.set_volume(1.0, 0.0)  # Left channel
                         life_lost_sound.play()
                     if left_player.lives <= 0:
                         game_over = True
@@ -294,6 +307,7 @@ while running:
                 elif alien.side == 1 and not right_player.upgrade_active:
                     right_player.lives -= 1
                     if life_lost_sound:
+                        life_lost_sound.set_volume(0.0, 1.0)  # Right channel
                         life_lost_sound.play()
                     if right_player.lives <= 0:
                         game_over = True
@@ -320,6 +334,7 @@ while running:
                     if alien in aliens:
                         aliens.remove(alien)
                         if hit_sound:
+                            hit_sound.set_volume(1.0, 1.0)  # Reset volume
                             hit_sound.play()
                         # Random chance to drop an upgrade (15%)
                         if not upgrade_left and alien.side == 0 and random.random() < 0.15:
@@ -358,6 +373,7 @@ while running:
                         player.upgrade_timer = pygame.time.get_ticks() + 5000  # 5 seconds
                         player.upgrade_notification = "Triple Shot!"
                     if upgrade_sound:
+                        upgrade_sound.set_volume(1.0, 1.0)  # Reset volume
                         upgrade_sound.play()
                     player.upgrade_notification_timer = pygame.time.get_ticks() + 2000  # Show notification for 2 seconds
                     if upgrade.side == 0:
