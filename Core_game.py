@@ -6,9 +6,9 @@ import random
 pygame.init()
 pygame.mixer.init()  # Initialize the mixer for sound
 
-# Screen setup (16:9 ratio)
+# Screen setup (16:9 ratio, borderless)
 WIDTH, HEIGHT = 1280, 720
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
+screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME)
 pygame.display.set_caption("Two-Player Space Invaders")
 
 # Colors
@@ -167,13 +167,14 @@ class Bullet:
 
 # Upgrade class
 class Upgrade:
-    def __init__(self, x, y):
+    def __init__(self, x, y, side):
         self.x = x
         self.y = y
         self.width = 20
         self.height = 20
         self.speed = 2
-        self.type = random.choice(["fast_shoot", "invincibility", "triple_shot"])  # Added triple_shot
+        self.type = random.choice(["fast_shoot", "invincibility", "triple_shot"])
+        self.side = side  # 0 for left, 1 for right
 
     def draw(self):
         draw_upgrade(screen, self.x, self.y, YELLOW)
@@ -183,7 +184,7 @@ class Upgrade:
 
 # Reset game
 def reset_game():
-    global left_player, right_player, aliens, bullets, upgrades, game_over, winner, game_started, game_over_played
+    global left_player, right_player, aliens, bullets, upgrades, game_over, winner, game_started, game_over_played, upgrade_left, upgrade_right
     left_player = Player(100, HEIGHT - 50, {"left": pygame.K_a, "right": pygame.K_d, "up": pygame.K_w, "down": pygame.K_s, "shoot": pygame.K_LCTRL}, 0)
     right_player = Player(WIDTH//2 + 100, HEIGHT - 50, {"left": pygame.K_LEFT, "right": pygame.K_RIGHT, "up": pygame.K_UP, "down": pygame.K_DOWN, "shoot": pygame.K_RSHIFT}, 1)
     aliens = [Alien(random.randint(0, WIDTH//2 - 25), 50, 0), Alien(random.randint(WIDTH//2, WIDTH - 25), 50, 1)]
@@ -193,6 +194,8 @@ def reset_game():
     winner = None
     game_started = False
     game_over_played = False
+    upgrade_left = False
+    upgrade_right = False
 
 # Initialize game
 reset_game()
@@ -215,6 +218,8 @@ while running:
                 if not game_started or game_over:
                     reset_game()
                     game_started = True
+            if event.key == pygame.K_ESCAPE:  # Exit on ESC key
+                running = False
 
     if not game_started:
         # Draw intro screen
@@ -231,8 +236,18 @@ while running:
             game_over_played = True
         game_over_text = font.render(f"Player {winner} wins!", True, WHITE)
         restart_text = font.render("Press SPACEBAR to restart", True, WHITE)
-        screen.blit(game_over_text, (WIDTH//2 - game_over_text.get_width()//2, HEIGHT//2 - 30))
-        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2 + 30))
+        esc_text = font.render("Press ESC to exit", True, WHITE)
+        screen.blit(game_over_text, (WIDTH//2 - game_over_text.get_width()//2, HEIGHT//2 - 60))
+        screen.blit(restart_text, (WIDTH//2 - restart_text.get_width()//2, HEIGHT//2))
+        screen.blit(esc_text, (WIDTH//2 - esc_text.get_width()//2, HEIGHT//2 + 60))
+
+        # Draw "You won!" on the winner's side
+        if winner == "Left":
+            you_won_text = font.render("You won!", True, GREEN)
+            screen.blit(you_won_text, (WIDTH//4 - you_won_text.get_width()//2, HEIGHT//2 - 30))
+        elif winner == "Right":
+            you_won_text = font.render("You won!", True, GREEN)
+            screen.blit(you_won_text, (WIDTH//2 + WIDTH//4 - you_won_text.get_width()//2, HEIGHT//2 - 30))
     else:
         # Game logic
         keys = pygame.key.get_pressed()
@@ -289,8 +304,12 @@ while running:
                 else:
                     aliens.append(Alien(random.randint(WIDTH//2, WIDTH - 25), 50, 1))
                 # Random chance to drop an upgrade (15%)
-                if random.random() < 0.15:  # Increased drop rate
-                    upgrades.append(Upgrade(alien.x, alien.y))
+                if not upgrade_left and alien.side == 0 and random.random() < 0.15:
+                    upgrades.append(Upgrade(alien.x, alien.y, 0))
+                    upgrade_left = True
+                elif not upgrade_right and alien.side == 1 and random.random() < 0.15:
+                    upgrades.append(Upgrade(alien.x, alien.y, 1))
+                    upgrade_right = True
 
             # Check for bullet-alien collision
             for bullet in bullets[:]:
@@ -303,8 +322,12 @@ while running:
                         if hit_sound:
                             hit_sound.play()
                         # Random chance to drop an upgrade (15%)
-                        if random.random() < 0.15:  # Increased drop rate
-                            upgrades.append(Upgrade(alien.x, alien.y))
+                        if not upgrade_left and alien.side == 0 and random.random() < 0.15:
+                            upgrades.append(Upgrade(alien.x, alien.y, 0))
+                            upgrade_left = True
+                        elif not upgrade_right and alien.side == 1 and random.random() < 0.15:
+                            upgrades.append(Upgrade(alien.x, alien.y, 1))
+                            upgrade_right = True
                     # Spawn two new aliens on the other side
                     if alien.side == 0:
                         aliens.append(Alien(random.randint(WIDTH//2, WIDTH - 25), 50, 1))
@@ -337,10 +360,18 @@ while running:
                     if upgrade_sound:
                         upgrade_sound.play()
                     player.upgrade_notification_timer = pygame.time.get_ticks() + 2000  # Show notification for 2 seconds
+                    if upgrade.side == 0:
+                        upgrade_left = False
+                    else:
+                        upgrade_right = False
                     upgrades.remove(upgrade)
                     break  # Exit the loop once the upgrade is collected
             # Remove upgrades that fall off the screen
             if upgrade.y > HEIGHT:
+                if upgrade.side == 0:
+                    upgrade_left = False
+                else:
+                    upgrade_right = False
                 upgrades.remove(upgrade)
 
         # Check for upgrade timer
